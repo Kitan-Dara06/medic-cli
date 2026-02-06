@@ -1,8 +1,8 @@
-def calculate_risk():
-    print("Calculating...")
-    risk = 100 / 1  # Changed from division by zero to division by one to avoid ZeroDivisionError
-    return risk
+def calculate_area(radius):
+    pi = 3.14
+    area = pi * (radius**2)
+    return area
 
 
-print("Starting app...")
-calculate_risk()
+if __name__ == "__main__":
+    print(calculate_area(5))

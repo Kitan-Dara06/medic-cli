@@ -1,2 +1,8 @@
-.venv
+# Open .gitignore and paste this:
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
 .env
+dist/
+build/

@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: medic-cli
+Version: 0.1.0
+Summary: A self-healing CLI tool that fixes Python crashes using AI.
+Author-email: Kitan <ololadeaaliyah@gmail.com>
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: requests
+Requires-Dist: python-dotenv

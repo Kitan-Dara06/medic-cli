@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medic-cli"
+version = "0.1.0"
+description = "A self-healing CLI tool that fixes Python crashes using AI."
+authors = [{name = "Kitan", email = "ololadeaaliyah@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "requests",
+    "python-dotenv" # Optional, if you want to keep supporting .env
+]
+
+[project.scripts]
+# THIS IS THE MAGIC LINE
+# It maps the command "medic" to the function "main" inside "medic/cli.py"
+medic = "medic.cli:main"

@@ -4,10 +4,8 @@ import difflib
 import re
 import subprocess
 import sys
-from unittest import result
-from weakref import KeyedRef
 
-from .brain import query_model
+from .brain import query_model, BackendFactory
 from .surgeon import construct_prompt
 
 try:
@@ -108,23 +106,29 @@ def apply_fix(file_path, old_code, new_code):
         return False
 
 
-def run_script(command_args, dry_run=False, auto_fix=False, enable_logging=True):
+def run_script(command_args, dry_run=False, auto_fix=False, enable_logging=True, backend=None, model=None):
     """
     Run a script and monitor for crashes
-    
+
     Args:
         command_args: Command to run
         dry_run: If True, show fixes but don't apply them
         auto_fix: If True, automatically apply fixes without prompting
         enable_logging: If True, log events to the logger
+        backend: AI backend to use ("openai", "ollama", or None for auto-select)
+        model: Specific model to use (e.g., "gpt-4", "deepseek-r1:8b")
     """
     logger = get_logger(enable_logging and LOGGING_AVAILABLE)
-    
+
     print(f"🚀 Medic Running: {' '.join(command_args)}")
     if dry_run:
         print("🔍 DRY-RUN MODE: Fixes will be shown but not applied")
     if auto_fix:
         print("⚡ AUTO-FIX MODE: Fixes will be applied automatically")
+    if backend:
+        print(f"🧠 Using backend: {backend}")
+    if model:
+        print(f"🤖 Using model: {model}")
 
     # 1. Start the process (Merging stderr into stdout)
     process = subprocess.Popen(
@@ -184,7 +188,7 @@ def run_script(command_args, dry_run=False, auto_fix=False, enable_logging=True)
                 # FIX 1: Pass 'full_error_log', NOT 'process.stderr' (which is None)
                 prompts = construct_prompt(context, full_error_log)
 
-                solution = query_model(prompts)
+                solution = query_model(prompts, backend=backend, model=model)
 
                 # Sanitize the solution
                 if solution:
@@ -232,17 +236,123 @@ def run_script(command_args, dry_run=False, auto_fix=False, enable_logging=True)
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: medic <script.py> OR medic <command>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="🚑 Medic CLI - AI-powered Python debugging",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  medic script.py                  # Run script with auto-selected backend
+  medic --backend ollama script.py # Force local Ollama backend
+  medic --backend openai script.py # Force OpenAI backend
+  medic --dry-run script.py        # Show fixes without applying
+  medic --auto-fix script.py       # Apply fixes automatically
+  medic pytest tests/              # Run any command with monitoring
 
-    user_args = sys.argv[1:]
+Backends:
+  ollama      - Local models (private, offline, free). Requires Ollama installed.
+  openai      - Cloud GPT models. Requires OPENAI_API_KEY env variable.
+  (auto)      - Defaults to Ollama if available, falls back to OpenAI.
+
+Environment Variables:
+  OLLAMA_HOST     - Ollama server URL (default: http://localhost:11434)
+  OLLAMA_MODEL    - Default Ollama model (default: llama3.2)
+  OPENAI_API_KEY  - OpenAI API key (or use API_KEY for legacy support)
+        """
+    )
+
+    parser.add_argument(
+        "command",
+        nargs="*",
+        help="Python script or command to run (e.g., script.py or pytest)"
+    )
+
+    parser.add_argument(
+        "--backend",
+        choices=["openai", "ollama"],
+        default=None,
+        help="AI backend to use (default: auto-select)"
+    )
+
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Specific model to use (e.g., 'gpt-4', 'deepseek-r1', 'mistral')"
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show proposed fixes without applying them"
+    )
+
+    parser.add_argument(
+        "--auto-fix",
+        action="store_true",
+        help="Automatically apply fixes without prompting"
+    )
+
+    parser.add_argument(
+        "--no-log",
+        action="store_true",
+        help="Disable logging"
+    )
+
+    parser.add_argument(
+        "--list-backends",
+        action="store_true",
+        help="List available backends and their status"
+    )
+
+    args = parser.parse_args()
+
+    # Validate: either --list-backends or a command must be provided
+    if not args.list_backends and not args.command:
+        parser.error("Please provide a command to run (e.g., medic script.py) or use --list-backends")
+
+    # Handle --list-backends
+    if args.list_backends:
+        print("🧠 Available AI Backends:")
+        print()
+
+        # Check Ollama
+        from .brain import OllamaBackend
+        ollama = OllamaBackend()
+        ollama_status = "✅ Available" if ollama.is_available() else "❌ Not connected"
+        print(f"  ollama  - {ollama_status}")
+        print(f"            Host: {ollama.host}")
+        print(f"            Default model: {ollama.model}")
+        print()
+
+        # Check OpenAI
+        from .brain import OpenAIBackend
+        openai = OpenAIBackend()
+        openai_status = "✅ Available" if openai.is_available() else "❌ No API key"
+        print(f"  openai  - {openai_status}")
+        if openai.is_available():
+            print(f"            Default model: {openai.model}")
+        else:
+            print(f"            Set OPENAI_API_KEY or API_KEY env variable")
+        print()
+
+        print("💡 Auto-select will prefer Ollama (local) if available.")
+        return
+
+    # Build the command to monitor
+    user_args = args.command
     if len(user_args) == 1 and user_args[0].endswith(".py"):
         command = ["python", user_args[0]]
     else:
         command = user_args
 
-    run_script(command)
+    # Run with the selected backend
+    run_script(
+        command,
+        dry_run=args.dry_run,
+        auto_fix=args.auto_fix,
+        enable_logging=not args.no_log,
+        backend=args.backend,
+        model=args.model
+    )
 
 
 if __name__ == "__main__":
